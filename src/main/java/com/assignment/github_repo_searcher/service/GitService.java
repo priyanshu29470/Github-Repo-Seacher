@@ -1,5 +1,6 @@
 package com.assignment.github_repo_searcher.service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -10,6 +11,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import com.assignment.github_repo_searcher.dto.GitSearchResponse;
 import com.assignment.github_repo_searcher.dto.RepoDTO;
+import com.assignment.github_repo_searcher.model.Repo;
+import com.assignment.github_repo_searcher.repo.RepoRepository;
 
 import reactor.core.publisher.Mono;
 
@@ -24,9 +27,12 @@ public class GitService {
     private String baseUrl= "https://api.github.com/search/repositories";
 
     private final WebClient webClient;
+    private final RepoRepository repoRepository;
 
-    public GitService(WebClient.Builder webClientBuilder) {
+    public GitService(WebClient.Builder webClientBuilder, RepoRepository repoRepository) {
         this.webClient = webClientBuilder.baseUrl(baseUrl).build();
+        this.repoRepository = repoRepository;
+
     }
 
     public Mono<GitSearchResponse> fetchRepos(String query, String language, String sort) {
@@ -39,18 +45,33 @@ public class GitService {
                 .bodyToMono(Map.class)
                 .map(response -> {
                     List<Map<String, Object>> items = (List<Map<String, Object>>) response.get("items");
-                    List<RepoDTO> repoDTOs = items.stream()
-                    .map(item -> new RepoDTO(
-                            ((Number) item.get("id")).longValue(), // Convert to long
-                            (String) item.get("name"),
-                            (String) item.get("description"),
-                            ((Map<String, Object>) item.get("owner")).get("login").toString(),
-                            (String) item.get("language"),
-                            ((Number) item.get("stargazers_count")).intValue(),
-                            ((Number) item.get("forks_count")).intValue(),
-                            (String) item.get("updated_at") // ISO 8601 format
-                    ))
-                    .collect(Collectors.toList());
+                     List<Repo> repos = items.stream()
+                            .map(item -> new Repo(
+                                    ((Number) item.get("id")).longValue(),
+                                    (String) item.get("name"),
+                                    (String) item.get("description"),
+                                    ((Map<String, Object>) item.get("owner")).get("login").toString(),
+                                    (String) item.get("language"),
+                                    ((Number) item.get("stargazers_count")).intValue(),
+                                    ((Number) item.get("forks_count")).intValue(),
+                                    Instant.parse((String) item.get("updated_at")) 
+                            ))
+                            .toList();
+                    repoRepository.saveAll(repos); 
+
+
+                    List<RepoDTO> repoDTOs = repos.stream()
+                            .map(repo -> new RepoDTO(
+                                    repo.getId(),
+                                    repo.getName(),
+                                    repo.getDescription(),
+                                    repo.getOwner(),
+                                    repo.getLanguage(),
+                                    repo.getStars(),
+                                    repo.getForks(),
+                                    repo.getLastUpdated().toString()
+                            ))
+                            .toList();
 
                     return new GitSearchResponse("Repositories fetched and saved successfully", repoDTOs);
                 });

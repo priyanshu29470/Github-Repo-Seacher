@@ -6,14 +6,18 @@ import lombok.*;
 
 import java.time.Instant;
 
-// @Entity
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-// @Table(name = "repositories")
+@Table(name = "repositories")
 public class Repo {
-    // @Id
+    @Id
     private Long id;
     private String name;
     private String description;
