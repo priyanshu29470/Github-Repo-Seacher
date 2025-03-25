@@ -6,11 +6,13 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.assignment.github_repo_searcher.dto.GitSearchResponse;
 import com.assignment.github_repo_searcher.dto.RepoDTO;
+import com.assignment.github_repo_searcher.dto.RepositorySearchRes;
 import com.assignment.github_repo_searcher.model.Repo;
 import com.assignment.github_repo_searcher.repo.RepoRepository;
 
@@ -35,7 +37,7 @@ public class GitService {
 
     }
 
-    public Mono<GitSearchResponse> fetchRepos(String query, String language, String sort) {
+    public Mono<GitSearchResponse> fetchReposFromGit(String query, String language, String sort) {
         String url = "?q=" + query + "+language:" + language + "&sort=" + sort + "&per_page=5&page=1";
 
         return webClient.get()
@@ -59,7 +61,6 @@ public class GitService {
                             .toList();
                     repoRepository.saveAll(repos); 
 
-
                     List<RepoDTO> repoDTOs = repos.stream()
                             .map(repo -> new RepoDTO(
                                     repo.getId(),
@@ -75,6 +76,24 @@ public class GitService {
 
                     return new GitSearchResponse("Repositories fetched and saved successfully", repoDTOs);
                 });
+    }
+
+    public RepositorySearchRes fetchFromRepos(String language, Integer minStars, String sort) {
+        List<Repo> repos = repoRepository.findRepos(language, minStars, Sort.by(Sort.Direction.DESC, sort));
+        List<RepoDTO> repoDTOs = repos.stream()
+        .map(repo -> new RepoDTO(
+                repo.getId(),
+                repo.getName(),
+                repo.getDescription(),
+                repo.getOwner(),
+                repo.getLanguage(),
+                repo.getStars(),
+                repo.getForks(),
+                repo.getLastUpdated().toString()
+        ))
+        .toList();
+
+        return new RepositorySearchRes(repoDTOs);
     }
         
 }

@@ -1,4 +1,4 @@
-package com.assignment.github_repo_searcher.model;
+package com.assignment.github_repo_searcher.dto;
 
 import lombok.Getter;
 import lombok.Setter;
