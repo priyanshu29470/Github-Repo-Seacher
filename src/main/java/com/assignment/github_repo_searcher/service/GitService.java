@@ -41,8 +41,19 @@ public class GitService {
                 .uri(url)
                 .header("Authorization", "Bearer " + token)
                 .retrieve()
+                .onStatus(status -> status.value() == 403 || status.value() == 429, response -> {
+                        return response.bodyToMono(Map.class)
+                                .flatMap(body -> {
+                                    String message = (String) body.getOrDefault("message", "Rate limit exceeded");
+                                    return Mono.error(new RuntimeException("GitHub API error: " + message));
+                                });
+                })
                 .bodyToMono(Map.class)
-                .map(res -> saveGitResponse(res));
+                .map(res -> saveGitResponse(res))
+                .onErrorResume(e -> {
+                        String errorMessage = "Failed to fetch repositories: " + e.getMessage();
+                        return Mono.just(new GitSearchResponse(errorMessage, List.of()));
+                    });
     }
 
     private String buildGitUrl(String query, String language, String sort) {
@@ -50,7 +61,13 @@ public class GitService {
     }
 
     private GitSearchResponse saveGitResponse(Map<String, Object> res) {
+        if (res == null || !res.containsKey("items")) {
+                return new GitSearchResponse("Invalid response from GitHub API", List.of());
+        }
         List<Repo> repos = repoMapper.convertToRepoList(res);
+        if (repos.isEmpty()) {
+                return new GitSearchResponse("No repositories found for the given query", List.of());
+        }
         repoRepository.saveAll(repos);
         return new GitSearchResponse("Repositories fetched and saved successfully", repoMapper.convertToRepoDTOList(repos));
     }
