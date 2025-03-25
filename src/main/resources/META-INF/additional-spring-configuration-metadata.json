@@ -1,0 +1,5 @@
+{"properties": [{
+  "name": "git.api.token",
+  "type": "java.lang.String",
+  "description": "Token for git"
+}]}
