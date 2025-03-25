@@ -1,11 +1,12 @@
 #!/bin/bash
 
-if [ -z "$1" ]; then
-    echo "Insert token after run.sh command"
+if [ -n "$1" ]; then
+    export GIT_API_TOKEN="$1"
+    echo "export GIT_API_TOKEN=\"$1\"" >> ~/.bashrc
+elif [ -z "$GIT_API_TOKEN" ]; then
+    echo "Insert token after run.sh command or set GIT_API_TOKEN in the environment"
     exit 1
 fi
-
-export GIT_API_TOKEN="$1"
 
 echo "Setting up db"
 cd docker || exit 1
