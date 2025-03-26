@@ -5,16 +5,18 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestTemplate;
 
 import com.assignment.github_repo_searcher.dto.GitSearchResponse;
 import com.assignment.github_repo_searcher.dto.RepositorySearchRes;
 import com.assignment.github_repo_searcher.helper.RepoMapper;
 import com.assignment.github_repo_searcher.model.Repo;
 import com.assignment.github_repo_searcher.repo.RepoRepository;
-
-import reactor.core.publisher.Mono;
 
 @Service
 public class GitService {
@@ -24,56 +26,60 @@ public class GitService {
 
     private static final String BASE_URL = "https://api.github.com/search/repositories";
 
-    private final WebClient webClient;
+    private final RestTemplate restTemplate;
     private final RepoRepository repoRepository;
     private final RepoMapper repoMapper;
 
-    public GitService(WebClient.Builder webClientBuilder, RepoRepository repoRepository, RepoMapper repoMapper) {
-        this.webClient = webClientBuilder.baseUrl(BASE_URL).build();
+    public GitService(RestTemplate restTemplate, RepoRepository repoRepository, RepoMapper repoMapper) {
+        this.restTemplate = restTemplate;
         this.repoRepository = repoRepository;
         this.repoMapper = repoMapper;
     }
 
-    public Mono<GitSearchResponse> fetchReposFromGit(String query, String language, String sort) {
+    public GitSearchResponse fetchReposFromGit(String query, String language, String sort) {
         String url = buildGitUrl(query, language, sort);
-
-        return webClient.get()
-                .uri(url)
-                .header("Authorization", "Bearer " + token)
-                .retrieve()
-                .onStatus(status -> status.value() == 403 || status.value() == 429, response -> {
-                        return response.bodyToMono(Map.class)
-                                .flatMap(body -> {
-                                    String message = (String) body.getOrDefault("message", "Rate limit exceeded");
-                                    return Mono.error(new RuntimeException("GitHub API error: " + message));
-                                });
-                })
-                .bodyToMono(Map.class)
-                .map(res -> saveGitResponse(res))
-                .onErrorResume(e -> {
-                        String errorMessage = "Failed to fetch repositories: " + e.getMessage();
-                        return Mono.just(new GitSearchResponse(errorMessage, List.of()));
-                    });
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Map.class
+            );
+            
+            return saveGitResponse(response.getBody());
+        } catch (Exception e) {
+            String errorMessage = "Failed to fetch repositories: " + e.getMessage();
+            return new GitSearchResponse(errorMessage, List.of());
+        }
     }
 
     private String buildGitUrl(String query, String language, String sort) {
-        return String.format("?q=%s+language:%s&sort=%s&per_page=5&page=1", query, language, sort);
+        return String.format("%s?q=%s+language:%s&sort=%s&per_page=5&page=1", 
+            BASE_URL, 
+            query != null ? query : "", 
+            language != null ? language : "", 
+            sort != null ? sort : "");
     }
 
     private GitSearchResponse saveGitResponse(Map<String, Object> res) {
         if (res == null || !res.containsKey("items")) {
-                return new GitSearchResponse("Invalid response from GitHub API", List.of());
+            return new GitSearchResponse("Invalid response from GitHub API", List.of());
         }
         List<Repo> repos = repoMapper.convertToRepoList(res);
         if (repos.isEmpty()) {
-                return new GitSearchResponse("No repositories found for the given query", List.of());
+            return new GitSearchResponse("No repositories found for the given query", List.of());
         }
         repoRepository.saveAll(repos);
         return new GitSearchResponse("Repositories fetched and saved successfully", repoMapper.convertToRepoDTOList(repos));
     }
 
     public RepositorySearchRes fetchFromRepos(String language, Integer minStars, String sort) {
-        List<Repo> repos = repoRepository.findRepos(language, minStars, Sort.by(Sort.Direction.DESC, sort));
+        String sortField = sort != null ? sort : "stars";
+        List<Repo> repos = repoRepository.findRepos(language, minStars, Sort.by(Sort.Direction.DESC, sortField));
         return new RepositorySearchRes(repoMapper.convertToRepoDTOList(repos));
     }
 }
