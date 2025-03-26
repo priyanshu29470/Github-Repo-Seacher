@@ -12,7 +12,7 @@ services:
     ports:
       - "5300:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - github_repo_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  github_repo_data:
